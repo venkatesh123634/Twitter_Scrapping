@@ -1,0 +1,64 @@
+import snscrape.modules.Twitter as Twitter
+import snscrape.databases as databases
+import pandas as pd
+import pymongo
+# Connect to MongoDB
+client = pymongo.MongoClient()
+db = client["twitter_data"]
+collection = db["tweets"]
+
+# Function to scrape tweets
+def scrape_tweets(keyword, date_range, tweet_count):
+    # Create a database to store the scraped data
+    sqlite_db = databases.SQLiteDatabase("tweets.db")
+    
+    # Create a Twitter instance
+    twitter = Twitter(db=sqlite_db)
+    
+    # Scrape tweets with the specified keyword
+    twitter.search_tweets(keyword, date_range, tweet_count)
+    
+    # Run the scraping process
+    twitter.run()
+    
+    # Get the scraped tweets from the database
+    tweets = sqlite_db.get_items(table='tweets', limit=tweet_count)
+    
+    # Create a list to store each tweet's information
+    tweets_list = []
+    for tweet in tweets:
+        tweets_list.append([tweet.timestamp, tweet.id, tweet.url, tweet.content, tweet.user.username, tweet.reply_count, tweet.retweet_count, tweet.language, tweet.source, tweet.like_count])
+    
+    # Create a pandas dataframe with the scraped tweets
+    df = pd.DataFrame(tweets_list, columns=['Date', 'ID', 'URL', 'Content', 'User', 'Reply Count', 'Retweet Count', 'Language', 'Source', 'Like Count'])
+    
+    return df
+
+# Function to save the data to a database
+def save_to_database(df, keyword):
+    # Generate a unique identifier based on the keyword and the current timestamp
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    identifier = keyword + "+" + timestamp
+    
+    # Convert the dataframe to a list of dictionaries
+    data = df.to_dict(orient='records')
+    
+    # Create a dictionary to store the scraped data
+    data = {"_id": identifier, "data": data}
+    
+    # Insert the data into the MongoDB collection
+    collection.insert_one(data)
+
+# Function to download the data to a file
+def download_data(df, file_format):
+    if file_format == 'csv':
+        df.to_csv("tweets.csv", index=False)
+    elif file_format == 'json':
+        df.to_json("tweets.json")
+
+# Main function to run the program
+def main():
+    # Get the keyword, date range, and tweet count from the user
+    keyword = input("Enter a keyword or hashtag: ")
+    date_range = input("Enter a date range (e.g. 'today 1-m'): ")
+    tweet_count = int(input("Enter the tweet count"))
